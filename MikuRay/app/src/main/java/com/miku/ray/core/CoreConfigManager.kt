@@ -977,17 +977,16 @@ object CoreConfigManager {
 
         val rule = JsonUtil.fromJson(JsonUtil.toJson(item), V2rayConfig.RoutingBean.RulesBean::class.java) ?: return
 
-        rule.ip?.let { ipList ->
-            val updatedIpList = ArrayList<String>()
-            ipList.forEach { ip ->
-                when (ip) {
-                    AppConfig.GEOIP_CN -> updatedIpList.add("ext:${AppConfig.GEOIP_ONLY_CN_PRIVATE_DAT}:cn")
-                    AppConfig.GEOIP_PRIVATE -> updatedIpList.add("ext:${AppConfig.GEOIP_ONLY_CN_PRIVATE_DAT}:private")
-                    else -> updatedIpList.add(ip)
-                }
-            }
-            rule.ip = updatedIpList
-        }
+        // Old-core fix (Lib v34, Xray-core v26.1.23): do NOT rewrite
+        // geoip:cn / geoip:private to ext:geoip-only-cn-private.dat:... .
+        // v26.1.23 loads geo data files while parsing routing rules, and
+        // that file is not bundled in the APK and not covered by the
+        // startup geo check, so a fresh install fails config load with
+        // "invalid field rule". Plain geoip:cn / geoip:private load from
+        // geoip.dat instead, which the app guarantees exists.
+        // (Upstream rewrites them to the smaller file as an optimisation;
+        // newer cores parse rules without loading the files, so it only
+        // breaks the old core.)
 
         if (SettingsManager.canUseProcessRouting()) {
             rule.process?.let { processList ->
