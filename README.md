@@ -2,6 +2,14 @@
 
 # 🩵 MikuRay 🩵
 
+> **Fork note (goodyrussia):** this fork is identical to upstream
+> [HatsuneMikuUwU/MikuRay](https://github.com/HatsuneMikuUwU/MikuRay)
+> except the Xray core is pinned to **v26.1.23** (AndroidLibXrayLite Lib v34)
+> — the last version where `allowInsecure` and plaintext Trojan/VLESS still
+> work — with small compatibility shims for the newer app code (see
+> `CoreServiceManager`, `CoreNativeManager`, `CertificateFingerprintManager`).
+> Builds are arm64-v8a only.
+
 **「みくみくにしてあげる♪」**  
 *A super kawaii V2Ray client for Android, powered by Xray core & v2fly core~*  
 

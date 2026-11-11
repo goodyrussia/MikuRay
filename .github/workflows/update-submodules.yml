@@ -89,8 +89,8 @@ jobs:
           if git diff --staged --quiet; then
             echo "No submodules selected or no changes detected. Skipping commit."
           else
-            git config user.name "HatsuneMikuUwU"
-            git config user.email "HatsuneMikuUwU@users.noreply.github.com"
+            git config user.name "goodyrussia"
+            git config user.email "goodyrussia@users.noreply.github.com"
             git commit -m "chore: update submodule ${{ env.UPDATED_MODULES }}"
             git push
           fi
