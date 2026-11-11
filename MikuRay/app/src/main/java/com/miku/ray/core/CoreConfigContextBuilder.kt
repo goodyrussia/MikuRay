@@ -206,28 +206,12 @@ object CoreConfigContextBuilder {
     }
 
     private fun collectRoutingDomainRulesForDns(): List<CoreConfigContext.RoutingDomainRule> {
-        val rulesetItems = MmkvManager.decodeRoutingRulesets() ?: return emptyList()
-        val result = mutableListOf<CoreConfigContext.RoutingDomainRule>()
-
-        rulesetItems
-        .asSequence()
-        .filter { it.enabled }
-        .filter { !it.domain.isNullOrEmpty() }
-        .forEach { rule ->
-            val normalizedOutboundTag = when (rule.outboundTag) {
-                AppConfig.TAG_DIRECT -> AppConfig.TAG_DIRECT
-                AppConfig.TAG_BLOCKED -> AppConfig.TAG_BLOCKED
-                else -> AppConfig.TAG_PROXY
-            }
-            result.add(
-                CoreConfigContext.RoutingDomainRule(
-                    domain = rule.domain.orEmpty(),
-                    outboundTag = normalizedOutboundTag
-                )
-            )
-        }
-
-        return result
+        // Fork change (goodyrussia): user routing rules are not used, so no
+        // user-rule domains flow into the DNS servers/hosts either. This
+        // keeps geosite:/geoip: references (e.g. geosite:cn) out of the
+        // generated config entirely; the old core loads those files at
+        // config-build time and fails if one is missing.
+        return emptyList()
     }
 
     private fun resolveFallbackOutbounds(resolvedOutbounds: List<CoreConfigContext.ResolvedOutbound>): List<CoreConfigContext.ResolvedOutbound> {

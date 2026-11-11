@@ -958,10 +958,14 @@ object CoreConfigManager {
         MmkvManager.decodeSettingsString(AppConfig.PREF_ROUTING_DOMAIN_STRATEGY)
         ?: "AsIs"
 
-        val rulesetItems = MmkvManager.decodeRoutingRulesets()
-        rulesetItems?.forEach { key ->
-            appendRoutingUserRule(configContext, key, v2rayConfig, policyGroupBalancerTags)
-        }
+        // Fork change (goodyrussia): user routing rulesets are NOT sent to
+        // the core at all. The user uses no routing rules and no China geo
+        // rules, and on the old core (v26.1.23) any geosite:/geoip:/ext:
+        // reference in a rule fails config load when the file is missing.
+        // Only the internal plumbing rules added elsewhere (DNS port 53 ->
+        // dns-out, dns-module -> proxy/direct) reach the core; all other
+        // traffic falls through to the first outbound (proxy).
+        // The saved rulesets stay in settings, they are just not applied.
     }
 
     private fun appendRoutingUserRule(
