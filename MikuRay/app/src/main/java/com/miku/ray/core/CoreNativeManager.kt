@@ -31,13 +31,11 @@ object CoreNativeManager {
         }
     }
 
+    // Old-core shim (Lib v34, Xray-core v26.1.23): Libv2ray.reconcileBrowserDialer
+    // does not exist in this lib version (added in v26.5.3). The browser-dialer
+    // feature is unavailable; normal proxying is unaffected.
     fun reconcileBrowserDialer(dialerAddr: String) {
-        try {
-            Libv2ray.reconcileBrowserDialer(dialerAddr)
-            LogUtil.i(AppConfig.TAG, "Browser dialer reconciled successfully with address: $dialerAddr")
-        } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "Failed to reconcile browser dialer with address: $dialerAddr", e)
-        }
+        LogUtil.d(AppConfig.TAG, "Browser dialer not supported on old core (Lib v34), ignoring: $dialerAddr")
     }
 
     fun getLibVersion(): String {

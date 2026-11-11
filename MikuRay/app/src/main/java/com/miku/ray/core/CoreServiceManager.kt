@@ -9,7 +9,6 @@ import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.os.Build
 import android.os.ParcelFileDescriptor
-import android.system.OsConstants
 import androidx.core.content.ContextCompat
 import com.miku.ray.AppConfig
 import com.miku.ray.R
@@ -40,9 +39,7 @@ import kotlinx.coroutines.launch
 import kotlin.jvm.Volatile
 import libv2ray.CoreCallbackHandler
 import libv2ray.CoreController
-import libv2ray.ProcessFinder
 import java.io.File
-import java.net.InetSocketAddress
 
 object CoreServiceManager {
 
@@ -52,7 +49,6 @@ object CoreServiceManager {
     private val coreController: CoreController = CoreNativeManager.newCoreController(CoreCallback())
     private val mMsgReceive = ReceiveMessageHandler()
     private var currentConfig: ProfileItem? = null
-    private var processFinder: XrayProcessFinder? = null
     private var browserDialer: IDialerService? = null
     private var networkMonitor: NetworkMonitor? = null
     private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -71,10 +67,9 @@ object CoreServiceManager {
         field = value
         val service = value?.getService()
         CoreNativeManager.initCoreEnv(service)
-        if (service != null && processFinder == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            processFinder = XrayProcessFinder(service)
-            coreController.registerProcessFinder(processFinder)
-        }
+        // Old-core shim (Lib v34, Xray-core v26.1.23): no ProcessFinder in
+        // this lib version (added in v26.4.15), so per-app UID attribution
+        // is unavailable. Core proxying is unaffected.
     }
 
     fun clearServiceControl(instance: ServiceControl) {
@@ -281,25 +276,41 @@ object CoreServiceManager {
     fun queryAllOutboundTrafficStats(): List<OutboundTrafficStat> {
         if (!isRunning()) return emptyList()
 
-        val payload = coreController.queryAllOutboundTrafficStats()
-
+        // Old-core shim (Lib v34, Xray-core v26.1.23): QueryAllOutboundTrafficStats
+        // does not exist in this lib version (added in v26.5.19). Rebuild the
+        // same per-tag totals with the per-counter QueryStats(tag, direct)
+        // that v34 does have. Fixed outbound tags plus any policy-group member
+        // tags registered while building the config. Proxychain hop tags are
+        // not enumerated here, so their traffic is not counted separately.
         val result = ArrayList<OutboundTrafficStat>()
-
-        payload.split(';').forEach { entry ->
-            if (entry.isBlank()) return@forEach
-
-            val parts = entry.split(',', limit = 3)
-            if (parts.size != 3) return@forEach
-
-            val value = parts[2].toLongOrNull() ?: return@forEach
-
-            result.add(
-                OutboundTrafficStat(
-                    tag = parts[0],
-                    direction = parts[1],
-                    value = value,
-                )
-            )
+        val tags = linkedSetOf(
+            AppConfig.TAG_PROXY,
+            AppConfig.TAG_DIRECT,
+            AppConfig.TAG_BLOCKED,
+            AppConfig.TAG_FRAGMENT,
+            AppConfig.TAG_DNS,
+            "dns-out",
+            AppConfig.TAG_BALANCER,
+        )
+        tags.addAll(PolicyGroupTrafficRegistry.tags())
+        for (tag in tags) {
+            for (direction in listOf(AppConfig.UPLINK, AppConfig.DOWNLINK)) {
+                val value = try {
+                    coreController.queryStats(tag, direction)
+                } catch (e: Exception) {
+                    LogUtil.e(AppConfig.TAG, "StartCore-Manager: queryStats failed for $tag/$direction", e)
+                    0L
+                }
+                if (value > 0) {
+                    result.add(
+                        OutboundTrafficStat(
+                            tag = tag,
+                            direction = direction,
+                            value = value,
+                        )
+                    )
+                }
+            }
         }
         return result
     }
@@ -405,38 +416,6 @@ object CoreServiceManager {
         override fun onEmitStatus(l: Long, s: String?): Long {
             LogUtil.i(AppConfig.TAG, "StartCore-Manager: CoreCallback onEmitStatus $s")
             return 0
-        }
-    }
-
-    private class XrayProcessFinder(context: Context) : ProcessFinder {
-        private val cm: ConnectivityManager? = context.getSystemService(ConnectivityManager::class.java)
-
-        override fun findProcessByConnection(network: String, srcIP: String, srcPort: Long, destIP: String, destPort: Long): Long {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return -1L
-            if (cm == null) return -1L
-            val proto = when (network) {
-                "tcp" -> OsConstants.IPPROTO_TCP
-                "udp" -> OsConstants.IPPROTO_UDP
-                else -> return -1L
-            }
-
-            if (destIP.isBlank() || destPort == 0L) {
-                LogUtil.d(AppConfig.TAG, "ProcessFinder: Find $network connection from $srcIP:$srcPort to :$destPort, (no dest)")
-                return -1L
-            }
-
-            return try {
-                val uid = cm.getConnectionOwnerUid(
-                    proto,
-                    InetSocketAddress(srcIP, srcPort.toInt()),
-                    InetSocketAddress(destIP, destPort.toInt())
-                ).toLong()
-                LogUtil.d(AppConfig.TAG, "ProcessFinder: Find $network connection from $srcIP:$srcPort to $destIP:$destPort, uid=$uid")
-
-                uid
-            } catch (_: Exception) {
-                -1L
-            }
         }
     }
 

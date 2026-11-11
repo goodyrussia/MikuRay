@@ -1,79 +1,17 @@
 package com.miku.ray.handler
 
 import com.miku.ray.AppConfig
-import com.miku.ray.dto.CertSha256Request
-import com.miku.ray.dto.CertSha256Result
 import com.miku.ray.dto.entities.ProfileItem
-import com.miku.ray.enums.EConfigType
-import com.miku.ray.util.HttpUtil
-import com.miku.ray.util.JsonUtil
 import com.miku.ray.util.LogUtil
-import com.miku.ray.util.Utils
-import libv2ray.Libv2ray
 
 object CertificateFingerprintManager {
-    private const val TIMEOUT_MS = 5000L
-
+    // Old-core shim (Lib v34, Xray-core v26.1.23): Libv2ray.fetchTlsCertSha256
+    // and fetchQuicCertSha256 do not exist in this lib version (added in
+    // v26.6.14), so automatic cert-fingerprint fill is unavailable. The
+    // server editors still accept a manually entered fingerprint, and callers
+    // already handle a null return as "could not fetch".
     fun fetchForManualFill(profile: ProfileItem): String? {
-        val request = buildRequest(profile) ?: return null
-        val result = if (profile.configType == EConfigType.HYSTERIA2) {
-            fetch("quic", request) { Libv2ray.fetchQuicCertSha256(it) }
-        } else {
-            fetch("tls", request) { Libv2ray.fetchTlsCertSha256(it) }
-        }
-
-        return result
-        ?.takeIf { it.error.isBlank() }
-        ?.sha256
-        ?.takeIf { it.isNotBlank() }
-    }
-
-    private fun buildRequest(profile: ProfileItem): CertSha256Request? {
-        if (!isFetchable(profile)) return null
-
-        val server = profile.server?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        val port = profile.serverPort?.toIntOrNull()?.takeIf { it > 0 } ?: AppConfig.DEFAULT_PORT
-
-        return CertSha256Request(
-            address = resolveDialAddress(server),
-            port = port,
-            serverName = inferServerName(profile),
-            timeoutMs = TIMEOUT_MS,
-        )
-    }
-
-    private fun isFetchable(profile: ProfileItem): Boolean {
-        return profile.configType == EConfigType.HYSTERIA2 || profile.security == AppConfig.TLS
-    }
-
-    private fun fetch(
-        type: String,
-        request: CertSha256Request,
-        fetcher: (String) -> String,
-    ): CertSha256Result? {
-        return try {
-            JsonUtil.fromJsonSafe(fetcher(JsonUtil.toJson(request)), CertSha256Result::class.java)
-        } catch (e: UnsatisfiedLinkError) {
-            LogUtil.e(AppConfig.TAG, "Fetch $type cert SHA-256 API missing in libv2ray", e)
-            null
-        } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "Fetch $type cert SHA-256 failed", e)
-            null
-        }
-    }
-
-    private fun resolveDialAddress(server: String): String {
-        if (Utils.isPureIpAddress(server) || !Utils.isDomainName(server)) return server
-
-        val preferIpv6 = MmkvManager.decodeSettingsBool(AppConfig.PREF_PREFER_IPV6, false)
-        return HttpUtil.resolveHostToIP(server, preferIpv6)
-        ?.firstOrNull()
-        ?.takeIf { it.isNotBlank() }
-        ?: server
-    }
-
-    private fun inferServerName(profile: ProfileItem): String? {
-        val sni = profile.sni?.takeIf { it.isNotBlank() }
-        return sni?.takeUnless { Utils.isPureIpAddress(it) }
+        LogUtil.d(AppConfig.TAG, "Fetch cert SHA-256 unavailable on old core (Lib v34)")
+        return null
     }
 }

@@ -16,4 +16,9 @@ object PolicyGroupTrafficRegistry {
 
     @Synchronized
     fun guidForTag(tag: String): String? = tagToGuid[tag]
+
+    // Snapshot of registered member tags, for the old-core traffic-stats shim
+    // in CoreServiceManager (Lib v34 has no QueryAllOutboundTrafficStats).
+    @Synchronized
+    fun tags(): Set<String> = tagToGuid.keys.toSet()
 }
